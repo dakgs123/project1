@@ -202,29 +202,29 @@ async def get_anime_detail(anime_id):
 
         english_title_candidate = get_english_title(anime_detail) # utils 헬퍼
         original_description = anime_detail.get('description')
-        original_staff_edges = anime_detail.get('staff', {}).get('edges', [])
+        original_staff_edges = anime_detail.get('staff', {}).get('edges', []) # [★] 모든 스태프 원본 가져오기
 
-        # ★ 서비스 함수 사용 (제목, 설명 번역)
+        # [★수정] 제목과 줄거리 번역만 요청 (API 호출 2회)
         tasks_to_run = [
             translate_title_to_korean_official(english_title_candidate),
             translate_general_text(original_description)
         ]
         
-        # ★ 서비스 함수 사용 (스태프 역할 번역)
-        role_tasks = [translate_general_text(edge['role']) for edge in original_staff_edges]
-        tasks_to_run.extend(role_tasks)
-
+        # [★삭제] 스태프 역할 번역(role_tasks) 관련 코드 모두 삭제
+        
         all_translated_results = await asyncio.gather(*tasks_to_run)
 
+        # [★수정] 결과도 2개만 받음
         korean_title = all_translated_results[0]
         korean_description = all_translated_results[1]
-        korean_roles = all_translated_results[2:]
+        # [★삭제] korean_roles = all_translated_results[2:] 삭제
 
         staff_list = []
-        for i, edge in enumerate(original_staff_edges):
+        # [★수정] 번역된 역할(korean_roles) 대신, 원본(edge['role'])을 그대로 사용
+        for edge in original_staff_edges:
             staff_list.append({
                 'name': edge['node']['name']['full'],
-                'role': korean_roles[i]
+                'role': edge['role'] # <-- 원본(영어) 역할 사용
             })
 
         simplified_detail = {
@@ -237,16 +237,18 @@ async def get_anime_detail(anime_id):
             'startDate': anime_detail.get('startDate'),
             'endDate': anime_detail.get('endDate'),
             'characters': [edge['node']['name']['full'] for edge in anime_detail.get('characters', {}).get('edges', [])],
-            'staff': staff_list,
+            'staff': staff_list, # <-- 원본 역할이 포함된 리스트
             'studios': [node['name'] for node in anime_detail.get('studios', {}).get('nodes', [])]
         }
         
         return create_response(data=simplified_detail)
             
     except Exception as e:
-        print(f"상세 정보 로딩 에러: {e}")
+        # [★수정] 아까 추가했던 에러 로그를 여기서도 확인
+        print(f"상세 정보 로딩 에러 (API 키 문제일 수 있음): {e}") 
         return create_response(success=False, error='상세 정보를 불러오지 못했습니다.', status=500)
 
+# ... (파일 하단, get_reviews 함수 등은 그대로 둡니다) ...
 
 @anime_bp.route('/api/reviews/<int:anime_id>', methods=['GET'])
 def get_reviews(anime_id):
