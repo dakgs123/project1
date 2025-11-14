@@ -1,0 +1,17 @@
+# 1. 환경 변수 (!!!가장 중요!!!)
+.env
+
+# 2. 데이터베이스 (민감 정보)
+instance/
+*.db
+*.sqlite3
+
+# 3. Python 캐시 및 가상 환경
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+
+# 4. (선택) OS 자동 생성 파일
+.DS_Store

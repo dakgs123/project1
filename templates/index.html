@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>project1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ... (스타일은 변경 사항 없음) ... */
+        * {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .anime-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s ease;
+        }
+        .anime-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+        #detail-container {
+            display: none; 
+        }
+        #theme-toggle {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        body .text-gray-800 { color: #1f2937; } 
+        body .text-gray-700 { color: #374151; }
+        body .text-gray-600 { color: #4b5563; }
+        body .text-gray-500 { color: #6b7280; }
+        body .bg-gray-100 { background-color: #f3f4f6; }
+        body .bg-white { background-color: #ffffff; }
+
+        html.dark body {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        html.dark .bg-gray-100 { background-color: #1e1e1e; }
+        html.dark .bg-white { background-color: #2c2c2c; color: #e0e0e0; }
+        html.dark .text-gray-800 { color: #ffffff; }
+        html.dark .text-gray-700 { color: #d1d5db; }
+        html.dark .text-gray-600 { color: #bdbdbd; }
+        html.dark .text-gray-500 { color: #a0a0a0; }
+        html.dark .border-gray-300 { border-color: #424242; }
+        html.dark .bg-gray-50 { background-color: #383838; }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center p-8">
+    <div class="fixed top-4 right-4 z-50">
+        <button id="theme-toggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+        </button>
+    </div>
+    
+    <div id="search-container" class="container w-full">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800 dark:text-gray-200">애니메이션 검색</h1>
+        
+        <div class="flex flex-col md:flex-row justify-center items-center gap-4 mb-8">
+            <input type="text" id="searchInput" placeholder="애니메이션 제목 입력" class="w-full md:w-auto p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-grow bg-white dark:bg-gray-700 dark:text-white">
+            
+            <label for="includeMovies" class="w-full md:w-auto p-3 rounded-lg shadow-sm transition-colors bg-purple-200 text-gray-800 hover:bg-purple-300 dark:bg-purple-500 dark:text-white dark:hover:bg-purple-600 cursor-pointer">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="includeMovies" class="form-checkbox h-5 w-5 text-purple-700 rounded dark:text-purple-300">
+                    <span class="text-gray-800 dark:text-white">영화 포함</span>
+                </div>
+            </label>
+            
+            <button id="searchButton" class="w-full md:w-auto p-3 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-colors">검색</button>
+        </div>
+        
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">현재 인기 있는 애니메이션</h2>
+        <div id="popular-anime" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-12">
+            </div>
+
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">검색 결과</h2>
+        <div id="results" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            </div>
+    </div>
+    
+    <div id="detail-container" class="container w-full mt-8">
+        <div id="anime-detail-content" class="bg-white p-8 rounded-lg shadow-lg dark:bg-gray-800">
+            </div>
+    </div>
+
+    <script>
+    // 이벤트 리스너 등록
+    document.getElementById('searchButton').addEventListener('click', searchAnime);
+    
+    // [수정] 'keypress' 대신 'keydown'을 사용하고 'isComposing'을 확인합니다.
+    document.getElementById('searchInput').addEventListener('keydown', function(e) {
+        // 사용자가 한글 등을 조합 중(isComposing)일 때는 Enter를 눌러도 검색을 실행하지 않습니다.
+        // 조합이 끝난 상태에서 Enter를 누른 경우에만 검색을 실행합니다.
+        if (e.key === 'Enter' && !e.isComposing) {
+            // form 태그 안의 input이 아니므로 기본 동작(줄바꿈 등)을 막을 필요가 있을 수 있습니다.
+            e.preventDefault(); 
+            searchAnime();
+        }
+    });
+    
+    // [수정] '목록으로 돌아가기' 버튼은 상세 정보가 로드될 때 동적으로 생성되므로, 여기서는 전역 이벤트를 사용하지 않습니다.
+    // 대신 showSearchPage 함수를 버튼의 onclick에 직접 연결합니다.
+    
+    // [삭제] <label> 태그를 사용함에 따라 'includeMoviesButton' 이벤트 리스너는 더 이상 필요하지 않습니다.
+    
+    let currentAnimeId = null;
+
+    // 페이지 로드 시 초기화
+    window.onload = function() {
+        fetchPopularAnime();
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
+    };
+
+    // 다크 모드 토글 기능
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+
+    // 검색 페이지 표시
+    function showSearchPage() {
+        document.getElementById('search-container').style.display = 'block';
+        document.getElementById('detail-container').style.display = 'none';
+    }
+
+    // 상세 페이지 표시
+    function showDetailPage() {
+        document.getElementById('search-container').style.display = 'none';
+        document.getElementById('detail-container').style.display = 'block';
+    }
+
+    // [보안 수정] innerHTML 대신 createElement와 textContent를 사용하여 XSS 방지
+    function createAnimeCard(anime) {
+        // 평점 HTML (이 HTML은 API 데이터가 아닌 개발자가 제어하므로 안전)
+        const scoreHtml = anime.averageScore ? `
+            <div class="flex items-center justify-center mt-2">
+                <svg class="w-5 h-5 text-yellow-400 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.381-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                <p class="text-lg font-semibold text-gray-800 dark:text-gray-200">${anime.averageScore} / 100</p>
+            </div>
+        ` : '<p class="text-sm text-gray-400 mt-2">평점 정보 없음</p>';
+
+        // 1. DOM 요소 생성
+        const card = document.createElement('div');
+        card.className = 'anime-card bg-white rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 dark:bg-gray-800';
+
+        const img = document.createElement('img');
+        img.src = anime.coverImage;
+        img.alt = anime.title; // alt 태그는 텍스트로 처리되어 안전
+        img.className = 'w-full h-64 object-cover';
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'p-4 text-center';
+        
+        const titleH2 = document.createElement('h2');
+        titleH2.className = 'text-xl font-bold mb-1 text-gray-800 dark:text-gray-200';
+        titleH2.textContent = anime.title; // [보안] textContent 사용
+        
+        const episodesP = document.createElement('p');
+        episodesP.className = 'text-gray-600 dark:text-gray-400 mt-1';
+        episodesP.textContent = anime.episodes ? `${anime.episodes}화` : 'N/A'; // [보안] textContent 사용
+        
+        const genresP = document.createElement('p');
+        genresP.className = 'text-gray-500 text-sm mt-1 dark:text-gray-500';
+        genresP.textContent = anime.genres ? anime.genres.join(', ') : '장르 정보 없음'; // [보안] textContent 사용
+
+        // 2. 요소 조립
+        contentDiv.appendChild(titleH2);
+        contentDiv.insertAdjacentHTML('beforeend', scoreHtml); // (안전한 HTML 삽입)
+        contentDiv.appendChild(episodesP);
+        contentDiv.appendChild(genresP);
+        
+        card.appendChild(img);
+        card.appendChild(contentDiv);
+        
+        card.addEventListener('click', () => getAnimeDetail(anime.id));
+        return card;
+    }
+
+    // [★ 수정] API 응답 구조 변경 (create_response) 반영
+    async function fetchPopularAnime() {
+        const popularContainer = document.getElementById('popular-anime');
+        popularContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">인기 애니메이션을 불러오는 중...</div>';
+        
+        try {
+            const response = await fetch('/api/popular_anime');
+            
+            // 1. 응답을 객체로 받음
+            const responseObject = await response.json();
+
+            if (!response.ok || !responseObject.success) {
+                // 2. 서버에서 보낸 에러 메시지(responseObject.error) 사용
+                throw new Error(responseObject.error || `HTTP ${response.status} 오류`);
+            }
+            
+            // 3. 실제 데이터(배열)는 responseObject.data 에서 추출
+            const animeList = responseObject.data; 
+
+            popularContainer.innerHTML = '';
+            
+            // 4. 이제 animeList는 실제 배열이므로 forEach가 작동함
+            animeList.forEach(anime => popularContainer.appendChild(createAnimeCard(anime)));
+
+        } catch (error) {
+            popularContainer.innerHTML = `<div class="col-span-full text-center text-red-500">인기 애니메이션 로딩 실패: ${error.message}</div>`;
+            console.error('Error fetching popular anime:', error);
+        }
+    }
+
+    // [★ 수정] API 응답 구조 변경 (create_response) 반영
+    async function searchAnime() {
+        const query = document.getElementById('searchInput').value;
+        const includeMovies = document.getElementById('includeMovies').checked;
+        
+        const resultsContainer = document.getElementById('results');
+        resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">검색 중...</div>';
+
+        const params = new URLSearchParams();
+        params.append('query', query);
+        params.append('includeMovies', includeMovies);
+
+        try {
+            const response = await fetch(`/api/search_anime?${params.toString()}`);
+            
+            // 1. 응답을 객체로 받음
+            const responseObject = await response.json();
+            
+            if (!response.ok || !responseObject.success) {
+                // 2. 서버 에러 메시지 사용
+                throw new Error(responseObject.error || `HTTP ${response.status} 오류`);
+            }
+
+            // 3. 실제 데이터(배열)는 .data 에서 추출
+            const animeList = responseObject.data;
+            
+            resultsContainer.innerHTML = '';
+            
+            if (animeList.length === 0) {
+                resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">검색 결과가 없습니다.</div>';
+                return;
+            }
+            
+            // 4. 이제 animeList는 배열이므로 forEach 작동
+            animeList.forEach(anime => resultsContainer.appendChild(createAnimeCard(anime)));
+
+        } catch (error) {
+            resultsContainer.innerHTML = `<div class="col-span-full text-center text-red-500">검색 실패: ${error.message}</div>`;
+            console.error('Error fetching search results:', error);
+        }
+    }
+
+    // [★ 수정] API 응답 구조 변경 (create_response) 반영
+    async function getAnimeDetail(animeId) {
+        currentAnimeId = animeId;
+        const detailContainer = document.getElementById('anime-detail-content');
+        detailContainer.innerHTML = '<div class="text-center text-gray-500 dark:text-gray-400">상세 정보를 불러오는 중...</div>';
+        showDetailPage();
+
+        try {
+            const response = await fetch(`/api/anime_detail/${animeId}`);
+
+            // 1. 응답을 객체로 받음
+            const responseObject = await response.json();
+            
+            if (!response.ok || !responseObject.success) {
+                // 2. 서버 에러 메시지 사용
+                throw new Error(responseObject.error || `HTTP ${response.status} 오류`);
+            }
+            
+            // 3. 실제 데이터(객체)는 .data 에서 추출
+            const anime = responseObject.data;
+            
+            if (!anime || !anime.id) {
+                throw new Error("서버에서 유효한 데이터를 받지 못했습니다.");
+            }
+
+            // --- DOM 요소 생성 및 조립 ---
+            detailContainer.innerHTML = ''; // 컨테이너 비우기
+
+            // 1. 뒤로가기 버튼
+            const backButton = document.createElement('button');
+            backButton.className = "mb-4 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors";
+            backButton.textContent = "목록으로 돌아가기";
+            backButton.onclick = showSearchPage;
+            detailContainer.appendChild(backButton);
+
+            // 2. 메인 컨텐츠 래퍼
+            const wrapper = document.createElement('div');
+            wrapper.className = "bg-white rounded-lg shadow-xl p-6 dark:bg-gray-800";
+
+            // 3. 상단 섹션 (이미지 + 정보)
+            const topSection = document.createElement('div');
+            topSection.className = "flex flex-col md:flex-row gap-6";
+            
+            const img = document.createElement('img');
+            img.src = anime.coverImage;
+            img.alt = anime.title;
+            img.className = "w-full md:w-64 h-auto object-cover rounded-lg shadow-lg";
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.className = "flex-grow";
+
+            const titleH1 = document.createElement('h1');
+            titleH1.className = "text-3xl font-extrabold text-gray-900 dark:text-white";
+            titleH1.textContent = anime.title; // [보안]
+            
+            const genresP = document.createElement('p');
+            genresP.className = "text-lg text-gray-500 mt-1 dark:text-gray-400";
+            genresP.textContent = `${anime.genres ? anime.genres.join(', ') : '장르 정보 없음'} | ${anime.episodes ? `${anime.episodes}화` : 'N/A'}`; // [보안]
+
+            const descTitleH2 = document.createElement('h2');
+            descTitleH2.className = "text-2xl font-bold mt-4 mb-2 text-gray-800 dark:text-gray-200";
+            descTitleH2.textContent = "줄거리";
+            
+            const descriptionDiv = document.createElement('div');
+            descriptionDiv.className = "text-gray-700 whitespace-pre-wrap dark:text-gray-300";
+            // 백엔드에서 이미 HTML 태그를 제거했거나, 텍스트로 번역되었으므로 textContent 사용
+            descriptionDiv.textContent = anime.description || '줄거리 정보 없음'; // [보안]
+            
+            infoDiv.append(titleH1, genresP, descTitleH2, descriptionDiv);
+            topSection.append(img, infoDiv);
+            
+            // 4. 하단 섹션 (상세 정보)
+            const bottomSection = document.createElement('div');
+            bottomSection.className = "mt-6 border-t pt-4 dark:border-gray-700";
+
+            const basicInfoP = document.createElement('p');
+            basicInfoP.className = "text-sm text-gray-600 dark:text-gray-500";
+            // textContent는 <br>을 해석하지 못하므로, innerHTML을 사용하되 안전하게 구성
+            basicInfoP.innerHTML = `
+                <strong>제작사:</strong> ${escapeHTML(anime.studios ? anime.studios.join(', ') : 'N/A')}<br>
+                <strong>방영 시작일:</strong> ${anime.startDate ? `${anime.startDate.year}년 ${anime.startDate.month}월 ${anime.startDate.day}일` : 'N/A'}<br>
+                <strong>방영 종료일:</strong> ${anime.endDate ? `${anime.endDate.year}년 ${anime.endDate.month}월 ${anime.endDate.day}일` : 'N/A'}
+            `;
+
+            // 5. 스태프 목록
+            const staffDiv = document.createElement('div');
+            staffDiv.className = "mt-4";
+            const staffTitleH3 = document.createElement('h3');
+            staffTitleH3.className = "font-bold text-gray-800 dark:text-gray-200";
+            staffTitleH3.textContent = "주요 스태프";
+            const staffUl = document.createElement('ul');
+            staffUl.className = "text-sm text-gray-600 list-disc ml-4 mt-1 dark:text-gray-400";
+            anime.staff.forEach(s => {
+                const li = document.createElement('li');
+                li.textContent = `${s.name} (${s.role})`; // [보안]
+                staffUl.appendChild(li);
+            });
+            staffDiv.append(staffTitleH3, staffUl);
+
+            // 6. 등장인물 목록
+            const charDiv = document.createElement('div');
+            charDiv.className = "mt-4";
+            const charTitleH3 = document.createElement('h3');
+            charTitleH3.className = "font-bold text-gray-800 dark:text-gray-200";
+            charTitleH3.textContent = "주요 등장인물 (10명)";
+            const charUl = document.createElement('ul');
+            charUl.className = "text-sm text-gray-600 list-disc ml-4 mt-1 dark:text-gray-400";
+            anime.characters.slice(0, 10).forEach(c => {
+                const li = document.createElement('li');
+                li.textContent = c; // [보안]
+                charUl.appendChild(li);
+            });
+            charDiv.append(charTitleH3, charUl);
+            
+            bottomSection.append(basicInfoP, staffDiv, charDiv);
+            wrapper.append(topSection, bottomSection);
+            detailContainer.appendChild(wrapper);
+
+            // --- [★추가] 리뷰 섹션 생성 및 추가 ---
+            const reviewSection = createReviewSection(anime.id);
+            detailContainer.appendChild(reviewSection);
+            
+            // [★추가] 리뷰 목록 불러오기
+            fetchAndDisplayReviews(anime.id);
+            // ------------------------------------
+
+        } catch (error) {
+            detailContainer.innerHTML = `<div class="text-center text-red-500">상세 정보 로딩 실패: ${error.message}</div>`;
+            console.error('Error fetching anime detail:', error);
+        }
+    }
+    
+    // [추가] innerHTML의 대안으로 사용할 간단한 HTML 이스케이프 함수
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, function(match) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[match];
+        });
+    }
+    // --- [★추가] 리뷰 폼 + 목록 컨테이너 생성 함수 ---
+    function createReviewSection(animeId) {
+        const section = document.createElement('div');
+        section.className = "mt-8";
+        
+        // 1. 리뷰 작성 폼
+        const formTitle = document.createElement('h2');
+        formTitle.className = "text-2xl font-bold mb-4 text-gray-800 dark:text-gray-200";
+        formTitle.textContent = "리뷰 남기기";
+        
+        const form = document.createElement('form');
+        form.id = "review-form";
+        form.className = "bg-white dark:bg-gray-700 p-6 rounded-lg shadow-md";
+        
+        // 폼 내부 HTML (Tailwind CSS 적용)
+        form.innerHTML = `
+            <div class="mb-4">
+                <label for="review-username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">닉네임</label>
+                <input type="text" id="review-username" class="mt-1 block w-full p-2 border border-gray-300 rounded-md dark:bg-gray-600 dark:border-gray-500 dark:text-white" placeholder="닉네임을 입력하세요">
+            </div>
+            <div class="mb-4">
+                <label for="review-rating" class="block text-sm font-medium text-gray-700 dark:text-gray-300">평점 (0-100)</label>
+                <input type="number" id="review-rating" min="0" max="100" class="mt-1 block w-full p-2 border border-gray-300 rounded-md dark:bg-gray-600 dark:border-gray-500 dark:text-white" required>
+            </div>
+            <div class="mb-4">
+                <label for="review-text" class="block text-sm font-medium text-gray-700 dark:text-gray-300">리뷰 내용</label>
+                <textarea id="review-text" rows="4" class="mt-1 block w-full p-2 border border-gray-300 rounded-md dark:bg-gray-600 dark:border-gray-500 dark:text-white" placeholder="리뷰를 작성해주세요..."></textarea>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">리뷰 등록</button>
+        `;
+        
+        // 2. 리뷰 목록
+        const listTitle = document.createElement('h2');
+        listTitle.className = "text-2xl font-bold mt-8 mb-4 text-gray-800 dark:text-gray-200";
+        listTitle.textContent = "방문자 리뷰";
+        
+        const listContainer = document.createElement('div');
+        listContainer.id = "review-list-container";
+        listContainer.className = "space-y-4"; // 리뷰 카드 사이의 간격
+        
+        // 조립
+        section.append(formTitle, form, listTitle, listContainer);
+        
+        // 폼 전송(submit) 이벤트 리스너
+        form.addEventListener('submit', (e) => {
+            e.preventDefault(); // 페이지 새로고침 방지
+            submitReview(animeId);
+        });
+        
+        return section;
+    }
+    
+    // --- [★추가] 리뷰 제출 함수 ---
+    // [참고] submitReview 함수는 이미 { success, error } 구조를
+    // 올바르게 처리하고 있어서 수정할 필요가 없습니다.
+    async function submitReview(animeId) {
+        const username = document.getElementById('review-username').value;
+        const rating = document.getElementById('review-rating').value;
+        const text = document.getElementById('review-text').value;
+
+        if (!rating) {
+            alert('평점을 입력해주세요.');
+            return;
+        }
+        if (parseInt(rating, 10) < 0 || parseInt(rating, 10) > 100) {
+            alert('평점은 0에서 100 사이의 숫자여야 합니다.');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    animeId: animeId,
+                    username: username,
+                    rating: parseInt(rating, 10),
+                    text: text
+                })
+            });
+            
+            const result = await response.json(); // { success: true, data: { ... } }
+            
+            if (!response.ok || !result.success) { // [★] result.success 확인
+                throw new Error(result.error || '리뷰 등록에 실패했습니다.');
+            }
+            
+            alert('리뷰가 성공적으로 등록되었습니다!');
+            
+            // 폼 초기화
+            document.getElementById('review-username').value = '';
+            document.getElementById('review-rating').value = '';
+            document.getElementById('review-text').value = '';
+            
+            // 리뷰 목록 새로고침
+            fetchAndDisplayReviews(animeId);
+            
+        } catch (error) {
+            alert(`오류: ${error.message}`);
+            console.error("Error submitting review:", error);
+        }
+    }
+    
+    // --- [★ 수정] API 응답 구조 변경 (create_response) 반영 ---
+    async function fetchAndDisplayReviews(animeId) {
+        const listContainer = document.getElementById('review-list-container');
+        if (!listContainer) return; // 컨테이너가 없으면 종료
+        
+        listContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400">리뷰를 불러오는 중...</p>';
+        
+        try {
+            const response = await fetch(`/api/reviews/${animeId}`);
+            
+            // 1. 응답을 객체로 받음
+            const responseObject = await response.json();
+
+            if (!response.ok || !responseObject.success) {
+                // 2. 서버 에러 메시지 사용
+                throw new Error(responseObject.error || '리뷰 로딩에 실패했습니다.');
+            }
+            
+            // 3. 실제 데이터(배열)는 .data 에서 추출
+            const reviews = responseObject.data;
+            
+            listContainer.innerHTML = ''; // 로딩 메시지 제거
+            
+            if (reviews.length === 0) {
+                listContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400">아직 등록된 리뷰가 없습니다. 첫 번째 리뷰를 작성해보세요!</p>';
+                return;
+            }
+            
+            // 4. 이제 reviews는 배열이므로 forEach 작동
+            reviews.forEach(review => {
+                const reviewCard = document.createElement('div');
+                reviewCard.className = "bg-white dark:bg-gray-700 p-4 rounded-lg shadow";
+                
+                const header = document.createElement('div');
+                header.className = "flex justify-between items-center mb-2";
+                
+                const username = document.createElement('strong');
+                username.className = "text-gray-800 dark:text-gray-200";
+                username.textContent = escapeHTML(review.username); // XSS 방지
+                
+                const rating = document.createElement('span');
+                rating.className = "text-yellow-500 font-bold text-lg";
+                // 간단한 별표시 대신 점수 표시
+                rating.textContent = `⭐ ${review.rating} / 100`;
+                
+                header.append(username, rating);
+                
+                const text = document.createElement('p');
+                text.className = "text-gray-700 dark:text-gray-300 whitespace-pre-wrap mt-2";
+                text.textContent = escapeHTML(review.text) || '(코멘트 없음)'; // XSS 방지
+                
+                const date = document.createElement('span');
+                date.className = "text-xs text-gray-500 dark:text-gray-400 mt-3 block";
+                date.textContent = review.created_at;
+                
+                reviewCard.append(header, text, date);
+                listContainer.appendChild(reviewCard);
+            });
+            
+        } catch (error) {
+            listContainer.innerHTML = `<p class="text-red-500">리뷰 로딩 중 오류 발생: ${error.message}</p>`;
+            console.error("Error fetching reviews:", error);
+        }
+    }
+</script>
+</body>
+</html>
