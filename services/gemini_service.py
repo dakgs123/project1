@@ -1,12 +1,7 @@
-# services/gemini_service.py (최종 수정본)
-
 import os
 from google import genai
 from google.genai import types
 from extensions import cache
-
-# [★삭제] 전역 gemini_client = None 삭제
-# [★삭제] get_gemini_client() 함수 전체 삭제
 
 def _create_client_safely():
     """
