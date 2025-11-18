@@ -3,6 +3,7 @@ from flask import Blueprint, request, render_template
 import httpx
 import asyncio
 import html
+import random 
 from extensions import db, cache
 from models import Review
 from utils import create_response, get_english_title, translate_genres_to_korean
@@ -120,9 +121,6 @@ def add_review():
         db.session.rollback()
         return create_response(success=False, error=str(e), status=500)
     
-#
-# (파일 맨 아래, add_review 함수가 끝난 다음 줄에 붙여넣기)
-#
 
 @anime_bp.route('/api/popular_anime', methods=['GET'])
 @cache.cached(timeout=600) # 10분간 캐싱
@@ -210,8 +208,6 @@ async def get_anime_detail(anime_id):
             translate_general_text(original_description)
         ]
         
-        # [★삭제] 스태프 역할 번역(role_tasks) 관련 코드 모두 삭제
-        
         all_translated_results = await asyncio.gather(*tasks_to_run)
 
         # [★수정] 결과도 2개만 받음
@@ -237,7 +233,7 @@ async def get_anime_detail(anime_id):
             'startDate': anime_detail.get('startDate'),
             'endDate': anime_detail.get('endDate'),
             'characters': [edge['node']['name']['full'] for edge in anime_detail.get('characters', {}).get('edges', [])],
-            'staff': staff_list, # <-- 원본 역할이 포함된 리스트
+            'staff': staff_list, 
             'studios': [node['name'] for node in anime_detail.get('studios', {}).get('nodes', [])]
         }
         
@@ -247,8 +243,6 @@ async def get_anime_detail(anime_id):
         # [★수정] 아까 추가했던 에러 로그를 여기서도 확인
         print(f"상세 정보 로딩 에러 (API 키 문제일 수 있음): {e}") 
         return create_response(success=False, error='상세 정보를 불러오지 못했습니다.', status=500)
-
-# ... (파일 하단, get_reviews 함수 등은 그대로 둡니다) ...
 
 @anime_bp.route('/api/reviews/<int:anime_id>', methods=['GET'])
 def get_reviews(anime_id):
@@ -269,3 +263,66 @@ def get_reviews(anime_id):
         
     except Exception as e:
         return create_response(success=False, error=f'리뷰 로딩 실패: {str(e)}', status=500)
+    
+@anime_bp.route('/api/recommendations', methods=['GET'])
+@cache.cached(timeout=1) 
+async def get_recommendations():
+    try:
+        # 1~200 사이의 랜덤 페이지 번호 생성
+        random_page = random.randint(1, 200)
+        
+        query = """
+        query ($page: Int) {
+            Page (page: $page, perPage: 5) { # 5개 항목
+                media ( type: ANIME, countryOfOrigin: "JP", episodes_greater: 1,
+                    genre_not_in: ["Ecchi", "Hentai"], 
+                    sort: [POPULARITY_DESC] # 인기도 순 정렬
+                ) {
+                    id title { romaji english } genres episodes coverImage { extraLarge }
+                    averageScore
+                }
+            }
+        }
+        """
+        variables = { 'page': random_page }
+        headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App', }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(ANILIST_API_URL, headers=headers, json={'query': query, 'variables': variables})
+            response.raise_for_status()
+            data = response.json()
+            
+        anime_list = data.get('data', {}).get('Page', {}).get('media', [])
+        
+        if not anime_list:
+            # 혹시 빈 페이지가 걸리면 1페이지에서 가져옴
+            variables['page'] = 1
+            async with httpx.AsyncClient() as client:
+                response = await client.post(ANILIST_API_URL, headers=headers, json={'query': query, 'variables': variables})
+                response.raise_for_status()
+                data = response.json()
+            anime_list = data.get('data', {}).get('Page', {}).get('media', [])
+
+        translation_tasks = []
+        for anime in anime_list:
+            english_title = get_english_title(anime)
+            translation_tasks.append(translate_title_to_korean_official(english_title))
+
+        korean_titles = await asyncio.gather(*translation_tasks)
+
+        simplified_list = []
+        for i, anime in enumerate(anime_list):
+            simplified_list.append({
+                'id': anime.get('id'),
+                'title': korean_titles[i],
+                'genres': translate_genres_to_korean(anime.get('genres')),
+                'episodes': anime.get('episodes'),
+                'coverImage': anime.get('coverImage', {}).get('extraLarge'),
+                'averageScore': anime.get('averageScore')
+            })
+            
+        return create_response(data=simplified_list)
+            
+    except Exception as e:
+        print(f"추천 애니 에러: {e}")
+        return create_response(success=False, error='추천 리스트 로딩 실패', status=500)

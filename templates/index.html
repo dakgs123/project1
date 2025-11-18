@@ -72,7 +72,7 @@
                     <span class="text-gray-800 dark:text-white">영화 포함</span>
                 </div>
             </label>
-            
+            <button id="recommendButton" class="w-full md:w-auto p-3 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700 transition-colors">추천 받기</button>
             <button id="searchButton" class="w-full md:w-auto p-3 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-colors">검색</button>
         </div>
         
@@ -93,6 +93,7 @@
     <script>
     // 이벤트 리스너 등록
     document.getElementById('searchButton').addEventListener('click', searchAnime);
+    document.getElementById('recommendButton').addEventListener('click', fetchRecommendations);
     
     // [수정] 'keypress' 대신 'keydown'을 사용하고 'isComposing'을 확인합니다.
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
@@ -104,11 +105,6 @@
             searchAnime();
         }
     });
-    
-    // [수정] '목록으로 돌아가기' 버튼은 상세 정보가 로드될 때 동적으로 생성되므로, 여기서는 전역 이벤트를 사용하지 않습니다.
-    // 대신 showSearchPage 함수를 버튼의 onclick에 직접 연결합니다.
-    
-    // [삭제] <label> 태그를 사용함에 따라 'includeMoviesButton' 이벤트 리스너는 더 이상 필요하지 않습니다.
     
     let currentAnimeId = null;
 
@@ -255,6 +251,35 @@
         } catch (error) {
             resultsContainer.innerHTML = `<div class="col-span-full text-center text-red-500">검색 실패: ${error.message}</div>`;
             console.error('Error fetching search results:', error);
+        }
+    }
+
+    async function fetchRecommendations() {
+        const resultsContainer = document.getElementById('results');
+        resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">랜덤 추천 애니를 불러오는 중...</div>';
+
+        try {
+            const response = await fetch('/api/recommendations'); // 새 API 호출
+            const responseObject = await response.json();
+
+            if (!response.ok || !responseObject.success) {
+                throw new Error(responseObject.error || `HTTP ${response.status} 오류`);
+            }
+
+            const animeList = responseObject.data;
+            resultsContainer.innerHTML = ''; // 로딩 메시지 제거
+            
+            if (animeList.length === 0) {
+                resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">추천 항목을 찾지 못했습니다.</div>';
+                return;
+            }
+
+            // 검색 결과 창에 추천 목록을 표시
+            animeList.forEach(anime => resultsContainer.appendChild(createAnimeCard(anime)));
+
+        } catch (error) {
+            resultsContainer.innerHTML = `<div class="col-span-full text-center text-red-500">추천 애니 로딩 실패: ${error.message}</div>`;
+            console.error('Error fetching recommendations:', error);
         }
     }
 
