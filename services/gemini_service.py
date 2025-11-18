@@ -32,7 +32,13 @@ async def translate_title_to_korean_official(english_title):
     cached = cache.get(cache_key)
     if cached: return cached
 
-    prompt = f"다음 애니메이션 제목을 한국 공식 정발 제목으로 번역해(설명X, 제목만): {english_title}"
+    prompt = (
+        f"당신은 요청받은 애니메이션의 '공식 한국어 제목' 1개만 반환하는 번역 API입니다.\n"
+        f"절대로 당신의 생각, [THOUGHT] 태그, 또는 다른 부연 설명을 출력하지 마세요.\n"
+        f"오직 제목만 응답해야 합니다.\n\n"
+        f"영어 제목: {english_title}\n"
+        f"한국어 제목:"
+    )
     try:
         response = await client.aio.models.generate_content(
             model='gemini-2.5-flash', contents=prompt
@@ -75,7 +81,7 @@ async def translate_search_query(query):
     try:
         response = await client.aio.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"AniList 검색용 영문/로마자 제목으로 변환해(설명X): {query}"
+            contents=f"AniList 검색용 영문/로마자 제목으로 변환해(설명X, 제목만 말해): {query}"
         )
         result = response.text.strip().replace('"', '')
         return result if len(result) > 1 else query
