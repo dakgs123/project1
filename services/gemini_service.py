@@ -70,17 +70,24 @@ async def get_verified_translation(text, type='general'):
             print(f"--- [불일치] 1: {result1} / 2: {result2} -> 3번째 심판 요청 ---")
             # [★수정] 심판 프롬프트도 강화
             judge_prompt = (
-                f"애니메이션 제목 '{text}'의 한국어 번역을 고르고 있어.\n"
-                f"규칙: 영어/일본어 없이 **한국어만** 있는 가장 깔끔한 제목을 선택해.\n"
+                f"당신은 애니메이션 제목 결정 심판입니다.\n"
+                f"다음 두 후보 중 '공식 한국어 제목' 규칙(영어/일본어 삭제, 한국어만 남김)에 더 잘 맞는 것을 선택하세요.\n"
+                f"만약 둘 다 이상하면 직접 새로 번역하세요.\n\n"
                 f"후보1: {result1}\n"
-                f"후보2: {result2}\n"
-                f"둘 중 더 규칙에 맞는 것을 고르거나, 둘 다 이상하면 새로 번역해서 '최종 제목'만 출력해."
+                f"후보2: {result2}\n\n"
+                f"**중요한 규칙:**\n"
+                f"1. 절대로 이유나 설명을 출력하지 마세요.\n"
+                f"2. 선택한(또는 새로 번역한) **최종 제목 텍스트 딱 하나만** 출력하세요.\n"
+                f"3. 예시: '나루토' (O), '제목은 나루토입니다.' (X), '이유는...' (X)"
             )
+
             response3 = await client.aio.models.generate_content(
                 model='gemini-2.5-flash', 
-                contents=judge_prompt
+                contents=judge_prompt,
+                # [★팁] temperature를 0으로 낮춰서 창의성을 죽이고 지시사항 준수율을 높임
+                config=types.GenerateContentConfig(temperature=0.0)
             )
-            final_result = response3.text.strip().replace('"', '')
+            final_result = response3.text.strip().replace('"', '').replace("'", "").split('\n')[-1]
             print(f"--- [최종 결정] {final_result} ---")
 
         # 4. DB에 저장 (기존 유지)
