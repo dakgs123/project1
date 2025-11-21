@@ -3,6 +3,7 @@ from flask import Flask
 from dotenv import load_dotenv  
 from config import Config
 from extensions import db, cache
+from models import Review, Translation
 from routes.anime_routes import anime_bp
 
 load_dotenv()
@@ -17,6 +18,7 @@ def create_app():
 
     # DB 테이블 생성
     with app.app_context():
+        #db.drop_all()
         db.create_all()
 
     # 블루프린트(라우트) 등록

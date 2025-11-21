@@ -6,7 +6,7 @@
     <title>project1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* ... (스타일은 변경 사항 없음) ... */
+
         * {
             transition: background-color 0.3s ease, color 0.3s ease;
         }
@@ -95,7 +95,6 @@
     document.getElementById('searchButton').addEventListener('click', searchAnime);
     document.getElementById('recommendButton').addEventListener('click', fetchRecommendations);
     
-    // [수정] 'keypress' 대신 'keydown'을 사용하고 'isComposing'을 확인합니다.
     document.getElementById('searchInput').addEventListener('keydown', function(e) {
         // 사용자가 한글 등을 조합 중(isComposing)일 때는 Enter를 눌러도 검색을 실행하지 않습니다.
         // 조합이 끝난 상태에서 Enter를 누른 경우에만 검색을 실행합니다.

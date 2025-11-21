@@ -15,3 +15,17 @@ class Review(db.Model):
 
     def __repr__(self):
         return f'<Review {self.username} - {self.anime_id}>'
+    
+class Translation(db.Model):
+    __tablename__ = 'translation'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    # 원문 텍스트 (검색 속도를 위해 인덱스 설정, 유니크)
+    original_text = db.Column(db.Text, unique=True, nullable=False, index=True)
+    # 번역된 텍스트
+    translated_text = db.Column(db.Text, nullable=False)
+    # 언제 저장되었는지 (나중에 오래된 번역 갱신용)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Translation {self.original_text[:20]}...>'
