@@ -143,8 +143,6 @@ async def translate_general_text(text):
     return await get_verified_translation(text, type='general')
 
 async def translate_search_query(query):
-    # 검색어는 DB 저장까지는 필요 없을 수 있으니, 그냥 단순 번역 유지 (속도 중요)
-    # 필요하면 이것도 get_verified_translation을 써도 됩니다.
     client = _create_client_safely()
     if not client: return query
     try:
