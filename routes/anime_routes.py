@@ -73,7 +73,7 @@ async def search_anime():
             # ★ 수정: utils 헬퍼 함수 사용
             english_title = get_english_title(anime) 
             # ★ 수정: gemini_service 함수 사용
-            translation_tasks.append(translate_title_to_korean_official(english_title))
+            translation_tasks.append(translate_title_to_korean_official(english_title, use_verification=False))
         
         korean_titles = await asyncio.gather(*translation_tasks)
 
@@ -150,7 +150,7 @@ async def get_popular_anime():
         translation_tasks = []
         for anime in anime_list:
             english_title = get_english_title(anime) # utils 헬퍼 사용
-            translation_tasks.append(translate_title_to_korean_official(english_title))
+            translation_tasks.append(translate_title_to_korean_official(english_title, use_verification=False))
 
         korean_titles = await asyncio.gather(*translation_tasks)
 
@@ -306,7 +306,7 @@ async def get_recommendations():
         translation_tasks = []
         for anime in anime_list:
             english_title = get_english_title(anime)
-            translation_tasks.append(translate_title_to_korean_official(english_title))
+            translation_tasks.append(translate_title_to_korean_official(english_title, use_verification=False))
 
         korean_titles = await asyncio.gather(*translation_tasks)
 
