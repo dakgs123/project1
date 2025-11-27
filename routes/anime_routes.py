@@ -21,25 +21,44 @@ def home():
 async def search_anime():
     search_query = request.args.get('query')
     include_movies = request.args.get('includeMovies', 'false') == 'true'
+    genre = request.args.get('genre')
 
-    if not search_query:
-        # ★ 수정: jsonify -> create_response
-        return create_response(success=False, error='검색어를 입력해주세요.', status=400)
+    if not search_query and not genre:
+        return create_response(success=False, error='검색어를 입력하거나 장르를 선택해주세요.', status=400)
     
-    try:
-        # ★ 수정: gemini_service 함수 사용
-        final_query = await translate_search_query(search_query) 
-    except Exception:
-        final_query = search_query
+    final_query = search_query
+    # 검색어가 있을 때만 번역 실행
+    if search_query:
+        try:
+            final_query = await translate_search_query(search_query) 
+        except Exception:
+            final_query = search_query
 
-    episodes_greater_filter = ''
+    # --- [★핵심 수정] 필터 조건 조립하기 ---
+    filters = []
+    
+    # 1. 영화 제외 필터
     if not include_movies:
-        episodes_greater_filter = 'episodes_greater: 1,'
+        filters.append('episodes_greater: 1')
+    
+    # 2. 장르 필터 (선택된 경우만 추가)
+    if genre:
+        filters.append(f'genre: "{genre}"')
+        
+    # 필터들을 쉼표로 연결
+    filter_string = ', '.join(filters)
+    if filter_string:
+        filter_string = ', ' + filter_string # 쿼리 문법에 맞게 앞에 쉼표 추가
+
+    # 3. 검색어 필터 (검색어가 있을 때만 추가)
+    # 검색어가 없으면(장르만 선택 시) search 인자를 쿼리에서 빼야 함
+    search_arg = '$search: String,' if search_query else ''
+    search_cond = 'search: $search,' if search_query else ''
 
     query = """
-    query ($search: String) {
+    query (%s) {
         Page (page: 1, perPage: 10) {
-            media ( search: $search, type: ANIME, countryOfOrigin: "JP", %s
+            media ( %s type: ANIME, countryOfOrigin: "JP", %s
                 averageScore_greater: 60, genre_not_in: ["Ecchi", "Hentai"],
                 sort: [SCORE_DESC, POPULARITY_DESC]
             ) {
@@ -48,9 +67,12 @@ async def search_anime():
             }
         }
     }
-    """ % episodes_greater_filter
+    """ % (search_arg, search_cond, filter_string) # [★수정] 동적으로 쿼리 조립
 
-    variables = { 'search': final_query }
+    variables = {}
+    if search_query:
+        variables['search'] = final_query
+        
     headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)', }
     
     try:
@@ -61,18 +83,19 @@ async def search_anime():
         
         anime_list = data.get('data', {}).get('Page', {}).get('media', [])
     
-        exact_match_list = [
-            anime for anime in anime_list
-            if final_query.lower() in (anime['title'].get('english') or '').lower() or
-               final_query.lower() in (anime['title'].get('romaji') or '').lower()
-        ]
-        final_list = exact_match_list if exact_match_list else anime_list
+        final_list = anime_list
+        if search_query:
+            exact_match_list = [
+                anime for anime in anime_list
+                if final_query.lower() in (anime['title'].get('english') or '').lower() or
+                   final_query.lower() in (anime['title'].get('romaji') or '').lower()
+            ]
+            final_list = exact_match_list if exact_match_list else anime_list
     
         translation_tasks = []
         for anime in final_list:
-            # ★ 수정: utils 헬퍼 함수 사용
-            english_title = get_english_title(anime) 
-            # ★ 수정: gemini_service 함수 사용
+            english_title = get_english_title(anime)
+            # 검색 리스트이므로 검증 끄기 (속도 최적화)
             translation_tasks.append(translate_title_to_korean_official(english_title, use_verification=False))
         
         korean_titles = await asyncio.gather(*translation_tasks)
@@ -82,25 +105,20 @@ async def search_anime():
             simplified_list.append({
                 'id': anime.get('id'),
                 'title': korean_titles[i],
-                # ★ 수정: utils 헬퍼 함수 사용
-                'genres': translate_genres_to_korean(anime.get('genres', [])), 
+                'genres': translate_genres_to_korean(anime.get('genres', [])),
                 'episodes': anime.get('episodes'),
                 'coverImage': anime.get('coverImage', {}).get('extraLarge'),
                 'averageScore': anime.get('averageScore')
             })
             
-        # ★ 수정: jsonify(list) -> create_response(data=list)
         return create_response(data=simplified_list)
             
     except httpx.RequestError as e:
         print(f"AniList API 요청 에러: {e}")
-        # ★ 수정: jsonify -> create_response
         return create_response(success=False, error='애니메이션 정보를 가져오는 데 실패했습니다.', status=502)
     except Exception as e:
         print(f"서버 내부 에러: {e}")
-        # ★ 수정: jsonify -> create_response
         return create_response(success=False, error=f'서버 내부 오류: {str(e)}', status=500)
-
 # [리뷰 작성 API 예시]
 @anime_bp.route('/api/review', methods=['POST'])
 def add_review():
@@ -264,28 +282,47 @@ def get_reviews(anime_id):
     except Exception as e:
         return create_response(success=False, error=f'리뷰 로딩 실패: {str(e)}', status=500)
     
+# routes/anime_routes.py
+
 @anime_bp.route('/api/recommendations', methods=['GET'])
-@cache.cached(timeout=1) 
+@cache.cached(timeout=5) # 캐시 시간을 5초로 줄임 (장르 바꿀 때마다 즉시 반영되도록)
 async def get_recommendations():
+    genre = request.args.get('genre') # [★추가] 장르 파라미터 받기
+
     try:
-        # 1~200 사이의 랜덤 페이지 번호 생성
-        random_page = random.randint(1, 200)
+        # [★수정] 장르 유무에 따라 랜덤 페이지 범위 조절
+        # 전체 애니는 많지만, 특정 장르의 인기작은 적을 수 있으므로 범위를 좁힘
+        if genre:
+            random_page = random.randint(1, 50) # 장르 선택 시 1~50페이지 중 랜덤
+        else:
+            random_page = random.randint(1, 200) # 전체일 땐 1~200페이지 중 랜덤
         
+        # [★수정] 필터 조건 조립
+        filters = 'episodes_greater: 1,' # 기본 필터
+        if genre:
+            filters += f' genre: "{genre}",' # 장르 필터 추가
+
         query = """
         query ($page: Int) {
-            Page (page: $page, perPage: 5) { # 5개 항목
-                media ( type: ANIME, countryOfOrigin: "JP", episodes_greater: 1,
+            Page (page: $page, perPage: 5) {
+                media ( type: ANIME, countryOfOrigin: "JP", 
                     genre_not_in: ["Ecchi", "Hentai"], 
-                    sort: [POPULARITY_DESC] # 인기도 순 정렬
+                    %s 
+                    sort: [POPULARITY_DESC]
                 ) {
                     id title { romaji english } genres episodes coverImage { extraLarge }
                     averageScore
                 }
             }
         }
-        """
+        """ % filters # 여기에 필터 문자열 삽입
+
         variables = { 'page': random_page }
-        headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App', }
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
 
         async with httpx.AsyncClient() as client:
             response = await client.post(ANILIST_API_URL, headers=headers, json={'query': query, 'variables': variables})
@@ -294,28 +331,28 @@ async def get_recommendations():
             
         anime_list = data.get('data', {}).get('Page', {}).get('media', [])
         
+        # [안전장치] 만약 랜덤 페이지에 데이터가 없으면(운 나쁘게 빈 페이지), 1페이지를 가져옴
         if not anime_list:
-            # 혹시 빈 페이지가 걸리면 1페이지에서 가져옴
             variables['page'] = 1
             async with httpx.AsyncClient() as client:
                 response = await client.post(ANILIST_API_URL, headers=headers, json={'query': query, 'variables': variables})
-                response.raise_for_status()
                 data = response.json()
             anime_list = data.get('data', {}).get('Page', {}).get('media', [])
 
-        translation_tasks = []
+        # 번역 로직 (검증 없이 빠르게 1회 번역)
+        korean_titles = []
         for anime in anime_list:
             english_title = get_english_title(anime)
-            translation_tasks.append(translate_title_to_korean_official(english_title, use_verification=False))
-
-        korean_titles = await asyncio.gather(*translation_tasks)
+            # [★중요] 추천 목록은 속도를 위해 use_verification=False
+            translated_title = await translate_title_to_korean_official(english_title, use_verification=False)
+            korean_titles.append(translated_title)
 
         simplified_list = []
         for i, anime in enumerate(anime_list):
             simplified_list.append({
                 'id': anime.get('id'),
                 'title': korean_titles[i],
-                'genres': translate_genres_to_korean(anime.get('genres')),
+                'genres': translate_genres_to_korean(anime.get('genres', [])),
                 'episodes': anime.get('episodes'),
                 'coverImage': anime.get('coverImage', {}).get('extraLarge'),
                 'averageScore': anime.get('averageScore')
