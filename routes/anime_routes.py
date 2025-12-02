@@ -34,10 +34,8 @@ async def search_anime():
         except Exception:
             final_query = search_query
 
-    # --- [★핵심 수정] 필터 조건 조립하기 ---
     filters = []
     
-    # 1. 영화 제외 필터
     if not include_movies:
         filters.append('episodes_greater: 1')
     
