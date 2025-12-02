@@ -283,18 +283,17 @@ def get_reviews(anime_id):
 # routes/anime_routes.py
 
 @anime_bp.route('/api/recommendations', methods=['GET'])
-@cache.cached(timeout=5) # 캐시 시간을 5초로 줄임 (장르 바꿀 때마다 즉시 반영되도록)
+@cache.cached(timeout=5) # 캐시 시간을 5초로 줄임 
 async def get_recommendations():
-    genre = request.args.get('genre') # [★추가] 장르 파라미터 받기
+    genre = request.args.get('genre') 
 
     try:
         # [★수정] 장르 유무에 따라 랜덤 페이지 범위 조절
         # 전체 애니는 많지만, 특정 장르의 인기작은 적을 수 있으므로 범위를 좁힘
         if genre:
-            random_page = random.randint(1, 50) # 장르 선택 시 1~50페이지 중 랜덤
+            random_page = random.randint(1, 50) 
         else:
-            random_page = random.randint(1, 200) # 전체일 땐 1~200페이지 중 랜덤
-        
+            random_page = random.randint(1, 200) 
         # [★수정] 필터 조건 조립
         filters = 'episodes_greater: 1,' # 기본 필터
         if genre:
