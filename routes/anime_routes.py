@@ -17,61 +17,73 @@ ANILIST_API_URL = 'https://graphql.anilist.co'
 def home():
     return render_template('index.html')
 
+# routes/anime_routes.py
+
 @anime_bp.route('/api/search_anime', methods=['GET'])
 async def search_anime():
     search_query = request.args.get('query')
     include_movies = request.args.get('includeMovies', 'false') == 'true'
     genre = request.args.get('genre')
 
+    # 1. 검색어와 장르 둘 다 없으면 에러
     if not search_query and not genre:
         return create_response(success=False, error='검색어를 입력하거나 장르를 선택해주세요.', status=400)
     
     final_query = search_query
-    # 검색어가 있을 때만 번역 실행
+    # 검색어가 있을 때만 번역 (DB 저장은 안 함)
     if search_query:
         try:
             final_query = await translate_search_query(search_query) 
         except Exception:
             final_query = search_query
 
-    filters = []
+    # --- [★핵심 수정] 쿼리 조건을 리스트로 관리 (쉼표 오류 방지) ---
+    # 1. 기본 조건들
+    args_list = [
+        'type: ANIME',
+        'countryOfOrigin: "JP"',
+        'averageScore_greater: 60',
+        'genre_not_in: ["Ecchi", "Hentai"]',
+        'sort: [SCORE_DESC, POPULARITY_DESC]'
+    ]
+
+    # 2. 동적 조건 추가
+    if search_query:
+        args_list.append('search: $search')
     
     if not include_movies:
-        filters.append('episodes_greater: 1')
-    
-    # 2. 장르 필터 (선택된 경우만 추가)
-    if genre:
-        filters.append(f'genre: "{genre}"')
+        args_list.append('episodes_greater: 1')
         
-    # 필터들을 쉼표로 연결
-    filter_string = ', '.join(filters)
-    if filter_string:
-        filter_string = ', ' + filter_string # 쿼리 문법에 맞게 앞에 쉼표 추가
+    if genre:
+        args_list.append(f'genre: "{genre}"')
 
-    # 3. 검색어 필터 (검색어가 있을 때만 추가)
-    # 검색어가 없으면(장르만 선택 시) search 인자를 쿼리에서 빼야 함
-    search_arg = '$search: String,' if search_query else ''
-    search_cond = 'search: $search,' if search_query else ''
+    # 3. 리스트를 쉼표로 예쁘게 연결
+    args_str = ', '.join(args_list)
 
-    query = """
-    query (%s) {
-        Page (page: 1, perPage: 10) {
-            media ( %s type: ANIME, countryOfOrigin: "JP", %s
-                averageScore_greater: 60, genre_not_in: ["Ecchi", "Hentai"],
-                sort: [SCORE_DESC, POPULARITY_DESC]
-            ) {
-                id title { romaji english } genres episodes
-                coverImage { extraLarge } averageScore
-            }
-        }
-    }
-    """ % (search_arg, search_cond, filter_string) # [★수정] 동적으로 쿼리 조립
+    # 4. 쿼리 헤더 결정 (검색어 변수가 있을 때만 괄호 사용)
+    query_header = 'query ($search: String)' if search_query else 'query'
+
+    # 5. 최종 쿼리 조립
+    query = f"""
+    {query_header} {{
+        Page (page: 1, perPage: 10) {{
+            media ({args_str}) {{
+                id title {{ romaji english }} genres episodes
+                coverImage {{ extraLarge }} averageScore
+            }}
+        }}
+    }}
+    """
 
     variables = {}
     if search_query:
         variables['search'] = final_query
-        
-    headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)', }
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)',
+    }
     
     try:
         async with httpx.AsyncClient() as client:
@@ -81,6 +93,7 @@ async def search_anime():
         
         anime_list = data.get('data', {}).get('Page', {}).get('media', [])
     
+        # 검색어가 있을 때만 정확도 필터링 수행
         final_list = anime_list
         if search_query:
             exact_match_list = [
@@ -117,6 +130,7 @@ async def search_anime():
     except Exception as e:
         print(f"서버 내부 에러: {e}")
         return create_response(success=False, error=f'서버 내부 오류: {str(e)}', status=500)
+    
 # [리뷰 작성 API 예시]
 @anime_bp.route('/api/review', methods=['POST'])
 def add_review():
@@ -153,7 +167,7 @@ async def get_popular_anime():
         }
     }
     """
-    headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App', }
+    headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)', }
 
     try:
         async with httpx.AsyncClient() as client:
@@ -202,7 +216,7 @@ async def get_anime_detail(anime_id):
     }
     """
     variables = { 'id': anime_id }
-    headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App', }
+    headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)', }
     
     try:
         async with httpx.AsyncClient() as client:
@@ -318,7 +332,7 @@ async def get_recommendations():
         headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'My-Personal-Anime-App (github.com/dakgs123)',
         }
 
         async with httpx.AsyncClient() as client:

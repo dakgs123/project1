@@ -35,7 +35,7 @@ async def get_verified_translation(text, type='general', use_verification=True):
     final_result = ""
     
     
-    MODEL_NAME = 'gemini-3-pro-preview'
+    MODEL_NAME = 'gemini-2.5-flash'
 
 
     try:
