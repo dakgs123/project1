@@ -83,7 +83,14 @@
                 <option value="Mecha">메카</option>
                 <option value="Mahou Shoujo">마법소녀</option>
                 <option value="Music">음악</option>
-            </select>    
+            </select>   
+            <select id="sortSelect" class="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-white">
+                <option value="POPULARITY_DESC">인기순</option>
+                <option value="SCORE_DESC">평점순</option>
+                <option value="TRENDING_DESC">최신 트렌드</option>
+                <option value="FAVOURITES_DESC">찜 많은 순</option>
+                <option value="START_DATE_DESC">최신 방영순</option>
+            </select> 
             <label for="includeMovies" class="w-full md:w-auto p-3 rounded-lg shadow-sm transition-colors bg-purple-200 text-gray-800 hover:bg-purple-300 dark:bg-purple-500 dark:text-white dark:hover:bg-purple-600 cursor-pointer">
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="includeMovies" class="form-checkbox h-5 w-5 text-purple-700 rounded dark:text-purple-300">
@@ -234,6 +241,7 @@
         const query = document.getElementById('searchInput').value;
         const includeMovies = document.getElementById('includeMovies').checked;
         const genre = document.getElementById('genreSelect').value;
+        const sort = document.getElementById('sortSelect').value;
 
         const resultsContainer = document.getElementById('results');
         resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">검색 중...</div>';
@@ -242,6 +250,7 @@
         params.append('query', query);
         params.append('includeMovies', includeMovies);
         if (genre) params.append('genre', genre);
+        params.append('sort', sort);
 
         try {
             const response = await fetch(`/api/search_anime?${params.toString()}`);
@@ -274,23 +283,24 @@
     }
 
     // [★수정] 선택된 장르를 포함하여 랜덤 추천 요청
+    // [★수정] 장르와 정렬 기준을 모두 반영하여 추천 요청
     async function fetchRecommendations() {
-        const genre = document.getElementById('genreSelect').value; // [★추가] 장르 값 읽기
+        const genre = document.getElementById('genreSelect').value;
+        const sort = document.getElementById('sortSelect').value; // [★추가] 정렬 값 읽기
         const resultsContainer = document.getElementById('results');
         
-        // 메시지도 장르 선택 여부에 따라 다르게 표시
-        const loadingMsg = genre 
-            ? `${genre} 장르의 추천 애니를 찾는 중...` 
-            : '랜덤 추천 애니를 불러오는 중...';
+        let loadingMsg = '랜덤 추천 애니를 불러오는 중...';
+        if (genre) loadingMsg = `${genre} 장르의 추천 애니를 찾는 중...`;
         
         resultsContainer.innerHTML = `<div class="col-span-full text-center text-gray-500 dark:text-gray-400">${loadingMsg}</div>`;
 
         try {
-            // [★핵심] 장르가 있으면 URL 파라미터에 추가
-            let url = '/api/recommendations';
-            if (genre) {
-                url += `?genre=${encodeURIComponent(genre)}`;
-            }
+            // [★핵심] URL 파라미터 조립 (URLSearchParams 사용 추천)
+            const params = new URLSearchParams();
+            if (genre) params.append('genre', genre);
+            if (sort) params.append('sort', sort); // 정렬 파라미터 추가
+
+            const url = `/api/recommendations?${params.toString()}`;
 
             const response = await fetch(url);
             const responseObject = await response.json();
@@ -303,7 +313,7 @@
             resultsContainer.innerHTML = ''; 
             
             if (animeList.length === 0) {
-                resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">해당 장르의 추천 항목을 찾지 못했습니다.</div>';
+                resultsContainer.innerHTML = '<div class="col-span-full text-center text-gray-500 dark:text-gray-400">조건에 맞는 추천 항목을 찾지 못했습니다.</div>';
                 return;
             }
 

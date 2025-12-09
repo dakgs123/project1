@@ -24,6 +24,7 @@ async def search_anime():
     search_query = request.args.get('query')
     include_movies = request.args.get('includeMovies', 'false') == 'true'
     genre = request.args.get('genre')
+    sort_option = request.args.get('sort', 'POPULARITY_DESC')
 
     # 1. 검색어와 장르 둘 다 없으면 에러
     if not search_query and not genre:
@@ -44,7 +45,7 @@ async def search_anime():
         'countryOfOrigin: "JP"',
         'averageScore_greater: 60',
         'genre_not_in: ["Ecchi", "Hentai"]',
-        'sort: [SCORE_DESC, POPULARITY_DESC]'
+        f'sort: [{sort_option}]'
     ]
 
     # 2. 동적 조건 추가
@@ -296,37 +297,42 @@ def get_reviews(anime_id):
     
 # routes/anime_routes.py
 
+# routes/anime_routes.py
+
 @anime_bp.route('/api/recommendations', methods=['GET'])
-@cache.cached(timeout=5) # 캐시 시간을 5초로 줄임 
+@cache.cached(timeout=5)
 async def get_recommendations():
-    genre = request.args.get('genre') 
+    genre = request.args.get('genre')
+    sort_option = request.args.get('sort', 'POPULARITY_DESC') # [★추가] 정렬 옵션 받기
 
     try:
-        # [★수정] 장르 유무에 따라 랜덤 페이지 범위 조절
-        # 전체 애니는 많지만, 특정 장르의 인기작은 적을 수 있으므로 범위를 좁힘
-        if genre:
+        # [★수정] 장르나 정렬 기준이 변경되면 유효 데이터 범위를 고려해 페이지 랜덤 범위 축소
+        # (예: 평점순 정렬 시 200페이지로 가면 평점 낮은 게 나올 수 있으므로 앞쪽에서 랜덤 추출)
+        if genre or sort_option != 'POPULARITY_DESC':
             random_page = random.randint(1, 50) 
         else:
-            random_page = random.randint(1, 200) 
-        # [★수정] 필터 조건 조립
-        filters = 'episodes_greater: 1,' # 기본 필터
+            random_page = random.randint(1, 200) # 기본 인기순일 때는 넓게 탐색
+        
+        # 필터 조건 조립
+        filters = 'episodes_greater: 1,'
         if genre:
-            filters += f' genre: "{genre}",' # 장르 필터 추가
+            filters += f' genre: "{genre}",'
 
+        # [★수정] 쿼리에 sort 변수 적용
         query = """
         query ($page: Int) {
             Page (page: $page, perPage: 5) {
                 media ( type: ANIME, countryOfOrigin: "JP", 
                     genre_not_in: ["Ecchi", "Hentai"], 
                     %s 
-                    sort: [POPULARITY_DESC]
+                    sort: [%s] 
                 ) {
                     id title { romaji english } genres episodes coverImage { extraLarge }
                     averageScore
                 }
             }
         }
-        """ % filters # 여기에 필터 문자열 삽입
+        """ % (filters, sort_option) # 여기에 필터와 정렬 옵션 삽입
 
         variables = { 'page': random_page }
         headers = {
@@ -342,7 +348,7 @@ async def get_recommendations():
             
         anime_list = data.get('data', {}).get('Page', {}).get('media', [])
         
-        # [안전장치] 만약 랜덤 페이지에 데이터가 없으면(운 나쁘게 빈 페이지), 1페이지를 가져옴
+        # [안전장치] 빈 페이지일 경우 1페이지 재요청
         if not anime_list:
             variables['page'] = 1
             async with httpx.AsyncClient() as client:
@@ -350,11 +356,10 @@ async def get_recommendations():
                 data = response.json()
             anime_list = data.get('data', {}).get('Page', {}).get('media', [])
 
-        # 번역 로직 (검증 없이 빠르게 1회 번역)
+        # 번역 로직 (빠른 속도 위해 검증 끔)
         korean_titles = []
         for anime in anime_list:
             english_title = get_english_title(anime)
-            # [★중요] 추천 목록은 속도를 위해 use_verification=False
             translated_title = await translate_title_to_korean_official(english_title, use_verification=False)
             korean_titles.append(translated_title)
 
